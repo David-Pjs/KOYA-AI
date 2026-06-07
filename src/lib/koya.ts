@@ -134,12 +134,6 @@ export async function readPapers(
   return data as PaperReadResult;
 }
 
-// Scale wrong-counts read from a sample of papers up to the whole class.
-export function scaleToClass(wrongInSample: number[], sampleSize: number, studentCount: number): number[] {
-  if (sampleSize <= 0) return wrongInSample;
-  if (sampleSize >= studentCount) return wrongInSample.map(w => Math.min(w, studentCount));
-  return wrongInSample.map(w => Math.round((w / sampleSize) * studentCount));
-}
 
 export function severityOf(wrong: number, total: number): "crit" | "concern" | "ok" {
   const pct = total > 0 ? wrong / total : 0;

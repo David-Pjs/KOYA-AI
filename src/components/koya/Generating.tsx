@@ -3,13 +3,20 @@
 import { useEffect, useState } from 'react'
 import type { ClassSetup } from '@/lib/koya'
 
-export default function Generating({ setup, readingScheme }: { setup: ClassSetup; readingScheme: boolean }) {
-  const steps = [
-    readingScheme ? 'Matching your scheme of work' : `Opening the ${setup.klass} curriculum`,
-    `Finding the skills ${setup.topic.toLowerCase()} leans on`,
-    'Writing questions a copied answer cannot fake',
-    'Putting five on the board',
-  ]
+export default function Generating({ setup, readingScheme, mode = 'questions' }: { setup: ClassSetup; readingScheme: boolean; mode?: 'questions' | 'papers' }) {
+  const steps = mode === 'papers'
+    ? [
+        'Reading the marked papers',
+        'Following each student\'s working',
+        'Noting where the answers go wrong',
+        'Tracing what the mistakes share',
+      ]
+    : [
+        readingScheme ? 'Matching your scheme of work' : `Opening the ${setup.klass} curriculum`,
+        `Finding the skills ${setup.topic.toLowerCase()} leans on`,
+        'Writing questions a copied answer cannot fake',
+        'Putting five on the board',
+      ]
   const [step, setStep] = useState(0)
   useEffect(() => {
     const id = setInterval(() => setStep(s => Math.min(s + 1, steps.length - 1)), 1100)

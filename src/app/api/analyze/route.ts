@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   const readinessScore = studentCount > 0 ? Math.round((advancedCount / studentCount) * 100) : 0
 
   const response = await deepseek.chat.completions.create({
-    model: 'deepseek-v4-pro',
+    model: 'deepseek-v4-flash',
     messages: [
       {
         role: 'system',

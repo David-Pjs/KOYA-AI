@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { ClassSetup, Diagnosis, Question } from '@/lib/koya'
-import { analyzeResults, generateQuestions, readPapers, scaleToClass } from '@/lib/koya'
+import { analyzeResults, generateQuestions, readPapers } from '@/lib/koya'
 import Home from '@/components/koya/Home'
 import Setup from '@/components/koya/Setup'
 import Generating from '@/components/koya/Generating'
@@ -21,11 +21,13 @@ export default function Koya() {
   const [wrongCounts, setWrongCounts] = useState<number[]>([])
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
   const [readingScheme, setReadingScheme] = useState(false)
+  const [genMode, setGenMode] = useState<'questions' | 'papers'>('questions')
   const [error, setError] = useState<string | null>(null)
 
   async function startQuestions(s: ClassSetup) {
     setSetup(s)
     setReadingScheme(!!s.schemeText)
+    setGenMode('questions')
     setStage('generating')
     setError(null)
     try {
@@ -55,13 +57,18 @@ export default function Koya() {
   async function runFromPapers(files: File[], s: ClassSetup) {
     setDiagnosis(null)
     setError(null)
-    setStage('reveal')
+    setGenMode('papers')
+    setStage('generating') // Groq reads the papers here
     try {
       const read = await readPapers(files, s, questions)
-      const counts = scaleToClass(read.wrongInSample, read.sampleSize, s.studentCount)
-      await runAnalysis(counts, s, read.notes)
+      // Honest: diagnose the papers actually read, do not extrapolate to the
+      // whole class. The cohort for this run IS the sample Koya read.
+      const sampleSetup: ClassSetup = { ...s, studentCount: read.sampleSize }
+      setSetup(sampleSetup)
+      await runAnalysis(read.wrongInSample, sampleSetup, read.notes)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
+      setStage('papers')
     }
   }
 
@@ -80,7 +87,7 @@ export default function Koya() {
     return <Setup onBack={reset} onSubmit={startQuestions} />
 
   if (stage === 'generating' && setup)
-    return <Generating setup={setup} readingScheme={readingScheme} />
+    return <Generating setup={setup} readingScheme={readingScheme} mode={genMode} />
 
   if (stage === 'board' && setup)
     return (
