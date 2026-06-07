@@ -7,6 +7,7 @@ import Wordmark from './Wordmark'
 interface Props {
   setup: ClassSetup
   questions: Question[]
+  wrongCounts: number[]
   diagnosis: Diagnosis | null
   error: string | null
   onReset: () => void
@@ -15,7 +16,7 @@ interface Props {
 
 const READ_MIN_MS = 2600
 
-export default function Reveal({ setup, questions, diagnosis, error, onReset, onRetry }: Props) {
+export default function Reveal({ setup, questions, wrongCounts, diagnosis, error, onReset, onRetry }: Props) {
   const [revealed, setRevealed] = useState(false)
   const startedAt = useRef(Date.now())
 
@@ -27,49 +28,65 @@ export default function Reveal({ setup, questions, diagnosis, error, onReset, on
   }, [diagnosis])
 
   if (error) return <RevealError error={error} onRetry={onRetry} onReset={onReset} />
-  if (!revealed || !diagnosis) return <Reading setup={setup} questions={questions} />
+  if (!revealed || !diagnosis) return <Reading setup={setup} questions={questions} wrongCounts={wrongCounts} />
 
   return <Diagnosed setup={setup} d={diagnosis} onReset={onReset} />
 }
 
 /* ── reading beat ───────────────────────────────────────── */
 
-function Reading({ setup, questions }: { setup: ClassSetup; questions: Question[] }) {
+function Reading({ setup, questions, wrongCounts }: { setup: ClassSetup; questions: Question[]; wrongCounts: number[] }) {
   const [step, setStep] = useState(0)
+  const total = setup.studentCount
+
+  // Real lines built from the actual marks entered — not scripted filler.
+  // Worst-failed skill first, so the eye follows the real signal.
+  const rows = questions
+    .map((q, i) => ({ skill: q.skill_tested, wrong: wrongCounts[i] ?? 0 }))
+    .sort((a, b) => b.wrong - a.wrong)
+    .map(r => ({
+      text: `${r.skill} — ${r.wrong} of ${total} missed it`,
+      heavy: r.wrong >= total * 0.5,
+    }))
+
+  const all = [
+    ...rows,
+    { text: `Lining up all ${questions.length} skills`, heavy: false },
+    { text: 'Tracing what the mistakes have in common', heavy: false },
+  ]
+
   useEffect(() => {
-    const id = setInterval(() => setStep(s => s + 1), 620)
+    const id = setInterval(() => setStep(s => s + 1), 600)
     return () => clearInterval(id)
   }, [])
-  const lines = questions.length
-    ? questions.map(q => `Reading question on ${q.skill_tested.toLowerCase()}`)
-    : ['Reading the papers']
-  const tail = ['Lining up the five skills', `Comparing all ${setup.studentCount} papers`, 'Finding what connects the mistakes']
-  const all = [...lines, ...tail]
 
   return (
     <div className="stage" style={{ background: 'var(--green-deep)', display: 'grid', placeItems: 'center' }}>
-      <div style={{ maxWidth: 460, textAlign: 'center' }}>
+      <div style={{ maxWidth: 520, textAlign: 'center', width: '100%' }}>
         <div className="spinner" style={{ margin: '0 auto 36px', borderColor: 'oklch(70% 0.05 158 / 0.3)', borderTopColor: 'var(--paper)' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <p className="label" style={{ marginBottom: 20, color: 'oklch(80% 0.04 158 / 0.55)' }}>Reading the marks you entered</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
           {all.map((l, i) => {
             const active = i === Math.min(step, all.length - 1)
             const done = i < Math.min(step, all.length - 1)
             return (
-              <p key={l} style={{
+              <p key={l.text} style={{
                 margin: 0,
-                fontSize: active ? '1.25rem' : '.95rem',
+                fontSize: active ? '1.2rem' : '.95rem',
                 fontFamily: active ? 'var(--font-display), serif' : 'inherit',
                 fontWeight: active ? 600 : 400,
                 letterSpacing: active ? '-0.02em' : 0,
-                color: active ? 'var(--paper)' : done ? 'oklch(80% 0.04 158 / 0.6)' : 'oklch(80% 0.04 158 / 0.25)',
+                color: active
+                  ? (l.heavy ? 'oklch(80% 0.12 40)' : 'var(--paper)')
+                  : done ? 'oklch(80% 0.04 158 / 0.55)' : 'oklch(80% 0.04 158 / 0.22)',
                 transition: 'all .4s var(--ease)',
               }}>
-                {l}
+                {l.text}
               </p>
             )
           })}
         </div>
-        <p className="label" style={{ marginTop: 40, color: 'oklch(80% 0.04 158 / 0.5)' }}>{setup.subject} · {setup.topic}</p>
+        <p className="label" style={{ marginTop: 40, color: 'oklch(80% 0.04 158 / 0.45)' }}>{setup.subject} · {setup.topic} · {total} students</p>
       </div>
     </div>
   )
@@ -84,6 +101,11 @@ function Diagnosed({ setup, d, onReset }: { setup: ClassSetup; d: Diagnosis; onR
     { key: 'advanced', name: 'Advanced', sev: 'ok', g: d.groups.advanced },
   ] as const
 
+  const total = setup.studentCount
+  const affected = d.dominant_gap.affected_count
+  // scale described in words, not a shouting digit
+  const share = affected >= total * 0.66 ? 'Most of the class' : affected >= total * 0.4 ? 'A large part of the class' : affected >= total * 0.2 ? 'A cluster of students' : 'A few students'
+
   return (
     <div className="stage">
       <div className="col">
@@ -92,48 +114,41 @@ function Diagnosed({ setup, d, onReset }: { setup: ClassSetup; d: Diagnosis; onR
           <span className="label" style={{ color: 'var(--ink-3)' }}>{setup.klass} · {setup.topic}</span>
         </header>
 
-        {/* the count */}
-        <p className="label rise" style={{ color: 'var(--terra-deep)', marginBottom: 18 }}>What Koya found</p>
-        <div className="rise" style={{ animationDelay: '.05s', display: 'flex', alignItems: 'flex-end', gap: 18, flexWrap: 'wrap', marginBottom: 22 }}>
-          <CountUp to={d.dominant_gap.affected_count} />
-          <p className="font-display" style={{ fontSize: 'clamp(1.3rem, 1rem + 1.5vw, 2rem)', color: 'var(--ink-2)', margin: '0 0 .35em', fontWeight: 500 }}>
-            of {setup.studentCount} share one gap
-          </p>
-        </div>
-
-        <h1 className="title rise" style={{ animationDelay: '.12s', marginBottom: 22, maxWidth: '22ch' }}>
-          {d.dominant_gap.label}
+        {/* the insight, as the star — not a number */}
+        <p className="label rise" style={{ color: 'var(--terra-deep)', marginBottom: 18 }}>What your class is really stuck on</p>
+        <h1 className="display-l rise" style={{ animationDelay: '.05s', marginBottom: 20, maxWidth: '20ch' }}>
+          {d.headline}
         </h1>
 
         {/* root gap — writes in */}
-        <div className="paper-card rise" style={{ animationDelay: '.2s', padding: '22px 24px', marginBottom: 16, borderColor: 'var(--green-line)', background: 'var(--green-wash)' }}>
-          <p className="label" style={{ color: 'var(--green-ink)', marginBottom: 10 }}>The real gap, and where it started</p>
+        <div className="paper-card rise" style={{ animationDelay: '.16s', padding: '22px 24px', marginBottom: 16, borderColor: 'var(--green-line)', background: 'var(--green-wash)' }}>
+          <p className="label" style={{ color: 'var(--green-ink)', marginBottom: 10 }}>Where they fell behind</p>
           <Typewriter text={d.dominant_gap.explanation} />
-          <p style={{ margin: '14px 0 0', fontSize: '.9rem' }}>
-            <span style={{ color: 'var(--ink-3)' }}>Traces back to </span>
-            <span className="font-hand" style={{ fontSize: '1.25rem', color: 'var(--terra-deep)' }}>{d.dominant_gap.root_topic}</span>
+          <p style={{ margin: '14px 0 0', fontSize: '.95rem', lineHeight: 1.5 }}>
+            <span style={{ color: 'var(--ink-2)' }}>{share} never secured </span>
+            <span className="font-hand" style={{ fontSize: '1.3rem', color: 'var(--terra-deep)' }}>{d.dominant_gap.root_topic}</span>
           </p>
         </div>
 
         {/* evidence — Koya shows its reasoning */}
         {d.evidence && (
-          <div className="rise" style={{ animationDelay: '.24s', display: 'flex', gap: 14, alignItems: 'flex-start', padding: '4px 4px 0' }}>
+          <div className="rise" style={{ animationDelay: '.22s', display: 'flex', gap: 14, alignItems: 'flex-start', padding: '4px 4px 0' }}>
             <span className="label" style={{ color: 'var(--ink-3)', marginTop: 4, flexShrink: 0 }}>How Koya<br />knows</span>
             <p style={{ margin: 0, fontSize: '.95rem', lineHeight: 1.6, color: 'var(--ink-2)' }}>{d.evidence}</p>
           </div>
         )}
 
-        {/* three groups */}
-        <p className="label rise" style={{ animationDelay: '.28s', margin: '32px 0 14px' }}>Your room splits three ways</p>
+        {/* how to close it — groups, led by what each needs */}
+        <p className="label rise" style={{ animationDelay: '.28s', margin: '34px 0 14px' }}>How to close it tomorrow</p>
         <div className="groups rise" style={{ animationDelay: '.32s' }}>
           {groups.map((grp, i) => (
-            <GroupCard key={grp.key} name={grp.name} sev={grp.sev} group={grp.g} delay={0.34 + i * 0.06} />
+            <GroupCard key={grp.key} name={grp.name} sev={grp.sev} group={grp.g} total={total} delay={0.34 + i * 0.06} />
           ))}
         </div>
 
         {/* tomorrow */}
         <div className="rise" style={{ animationDelay: '.5s', marginTop: 30, padding: '4px 0', display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <span className="label" style={{ color: 'var(--terra-deep)', marginTop: 8, flexShrink: 0 }}>Tomorrow</span>
+          <span className="label" style={{ color: 'var(--terra-deep)', marginTop: 8, flexShrink: 0 }}>Your first move</span>
           <p className="font-hand" style={{ fontSize: '1.65rem', color: 'var(--ink)', lineHeight: 1.35, margin: 0 }}>
             {d.tomorrow}
           </p>
@@ -148,18 +163,19 @@ function Diagnosed({ setup, d, onReset }: { setup: ClassSetup; d: Diagnosis; onR
   )
 }
 
-function GroupCard({ name, sev, group, delay }: { name: string; sev: 'crit' | 'concern' | 'ok'; group: Diagnosis['groups']['foundation']; delay: number }) {
+function GroupCard({ name, sev, group, total, delay }: { name: string; sev: 'crit' | 'concern' | 'ok'; group: Diagnosis['groups']['foundation']; total: number; delay: number }) {
   const [open, setOpen] = useState(false)
   const color = `var(--${sev})`
   const wash = `var(--${sev}-wash)`
   return (
     <div className="paper-card rise" style={{ animationDelay: `${delay}s`, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '16px 18px', background: wash, borderBottom: `1.5px solid ${color}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
           <span className="font-display" style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--ink)' }}>{name}</span>
-          <span className="num" style={{ fontSize: 30, color }}>{group.count}</span>
+          <span style={{ marginLeft: 'auto', fontSize: '.74rem', color: 'var(--ink-3)', fontWeight: 600 }}>about {group.count} of {total}</span>
         </div>
-        <p style={{ margin: '6px 0 0', fontSize: '.82rem', color: 'var(--ink-2)', lineHeight: 1.5 }}>{group.description}</p>
+        <p style={{ margin: '8px 0 0', fontSize: '.85rem', color: 'var(--ink)', lineHeight: 1.5 }}>{group.description}</p>
       </div>
       <button
         onClick={() => setOpen(o => !o)}
@@ -187,30 +203,6 @@ function GroupCard({ name, sev, group, delay }: { name: string; sev: 'crit' | 'c
         </p>
       </div>
     </div>
-  )
-}
-
-/* ── count up ───────────────────────────────────────────── */
-
-function CountUp({ to }: { to: number }) {
-  const [n, setN] = useState(0)
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setN(to); return }
-    let raf = 0
-    const dur = 950, start = performance.now()
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / dur)
-      const eased = 1 - Math.pow(1 - p, 4)
-      setN(Math.round(eased * to))
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [to])
-  return (
-    <span className="num" style={{ fontSize: 'clamp(4.5rem, 2rem + 14vw, 9rem)', lineHeight: 0.85, color: 'var(--crit)' }}>
-      {n}
-    </span>
   )
 }
 

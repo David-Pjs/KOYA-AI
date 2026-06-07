@@ -120,6 +120,7 @@ export default function Koya() {
       <Reveal
         setup={setup}
         questions={questions}
+        wrongCounts={wrongCounts}
         diagnosis={diagnosis}
         error={error}
         onReset={reset}

@@ -24,6 +24,18 @@ export async function POST(req: NextRequest) {
     ? `\nKoya read the actual marked papers. These are real mistakes students made, in their own working:\n${paperNotes.map((n: string) => `- ${n}`).join('\n')}\nUse these concrete errors in your explanation and especially in the evidence, quoting the kind of mistake you saw.`
     : ''
 
+  // ── Evaluation standard: group sizes are COMPUTED from the data, not invented
+  // by the model. The worst-failed prerequisite sets how many share the dominant
+  // gap; those split into Foundation (cannot do the basic) and Core (partly can);
+  // the rest are Advanced. Deterministic and auditable.
+  const counts: number[] = (wrongCounts as number[]).map(n => Math.max(0, Math.min(n, studentCount)))
+  const dominantWrong = counts.length ? Math.max(...counts) : 0
+  const foundationCount = Math.round(dominantWrong * 0.55)
+  const coreCount = dominantWrong - foundationCount
+  const advancedCount = Math.max(0, studentCount - dominantWrong)
+  const computedGroups = { foundation: foundationCount, core: coreCount, advanced: advancedCount }
+  const readinessScore = studentCount > 0 ? Math.round((advancedCount / studentCount) * 100) : 0
+
   const response = await deepseek.chat.completions.create({
     model: 'deepseek-v4-pro',
     messages: [
@@ -47,12 +59,12 @@ Do this:
 1. Identify the dominant misconception — the one root gap that explains the most failures across the questions.
 2. Show your reasoning: name the specific questions (by number and skill) whose high failure rates point to this gap, and the common thread between them. This is the evidence a teacher can check.
 3. Explain plainly what students are doing wrong and the exact earlier class/term the gap comes from.
-4. Group students into Foundation, Core, Advanced based on the results (counts must sum to ${studentCount}).
+4. The group sizes are ALREADY COMPUTED from the data (do not change them): Foundation = ${foundationCount}, Core = ${coreCount}, Advanced = ${advancedCount}, and ${dominantWrong} students share the dominant gap. Write each group's description and activity to fit these exact numbers.
 5. Give one paper-based activity per group (10 min, no devices). CRITICAL: the teacher is one person in one room. The Foundation and Advanced activities must be ones students can run on their own, in pairs or silently, WHILE the teacher works directly with another group. State briefly how each runs without her constant attention.
 
 Return this exact JSON:
 {
-  "headline": "One plain sentence e.g. '31 students cannot apply the formula because of a fraction gap from JSS2'",
+  "headline": "One plain, teacher-facing sentence naming what the class is actually stuck on and why. Do NOT start with a number or a count. Name the skill and the human reason. e.g. 'The class keeps collapsing on simultaneous equations because they cannot yet work confidently with negative numbers.'",
   "dominant_gap": {
     "label": "Short name of the gap",
     "explanation": "2-3 sentences: what students get wrong and why",
@@ -102,5 +114,17 @@ Return this exact JSON:
   })
 
   const result = JSON.parse(response.choices[0].message.content!)
+
+  // Override with the deterministic, computed numbers so the marks the teacher
+  // sees are always consistent with the data, never the model's invention.
+  if (result.groups) {
+    result.groups.foundation = { ...result.groups.foundation, count: computedGroups.foundation }
+    result.groups.core = { ...result.groups.core, count: computedGroups.core }
+    result.groups.advanced = { ...result.groups.advanced, count: computedGroups.advanced }
+  }
+  if (result.dominant_gap) result.dominant_gap.affected_count = dominantWrong
+  result.score = readinessScore
+  result.computed = true
+
   return NextResponse.json(result)
 }

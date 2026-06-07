@@ -1,6 +1,7 @@
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { lookupCurriculum, curriculumGrounding, CURRICULUM_SOURCE, CURRICULUM_COUNTRY } from './curriculum'
+import { buildVerifiedDiagnostic } from './questionbank'
 
 const deepseek = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -230,8 +231,23 @@ export async function generateDiagnostic(
   topic: string,
   subject: string,
   context?: string
-): Promise<{ questions: DiagnosticQuestion[]; grounded: boolean; source?: string }> {
+): Promise<{ questions: DiagnosticQuestion[]; grounded: boolean; source?: string; verified?: boolean }> {
   const entry = lookupCurriculum(topic, subject)
+
+  // Marking standard: if the topic is grounded, build from the verified bank so
+  // every answer is hand-checked and correct. No model hallucination in the key.
+  if (entry) {
+    const verified = buildVerifiedDiagnostic(entry)
+    if (verified) {
+      return {
+        questions: verified,
+        grounded: true,
+        verified: true,
+        source: `${CURRICULUM_SOURCE} (${CURRICULUM_COUNTRY}) · verified question bank`,
+      }
+    }
+  }
+
   const grounding = entry ? curriculumGrounding(entry) : ''
 
   const response = await deepseek.chat.completions.create({
