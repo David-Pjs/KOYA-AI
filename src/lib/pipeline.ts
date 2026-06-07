@@ -9,6 +9,45 @@ const deepseek = new OpenAI({
 
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
+export function hasGeminiKey(): boolean {
+  const k = process.env.GEMINI_API_KEY
+  return !!k && k !== 'your_gemini_key_here' && k.length > 10
+}
+
+// ─── SCHEME OF WORK: structure raw text into topics (no vision needed) ───────
+// Used for digital PDFs whose text we extract with unpdf, so a scheme PDF works
+// on the DeepSeek key alone, with no Gemini and no cost beyond one flash call.
+
+export async function structureSchemeText(
+  rawText: string,
+  subject: string,
+): Promise<{ topics: { title: string; week?: string }[]; text: string }> {
+  const text = rawText.slice(0, 24000) // cap context
+  const response = await deepseek.chat.completions.create({
+    model: 'deepseek-v4-flash',
+    messages: [
+      {
+        role: 'system',
+        content: 'You read Nigerian/African secondary school schemes of work and extract the topic list. Respond only with valid JSON.',
+      },
+      {
+        role: 'user',
+        content: `This is the extracted text of a ${subject} scheme of work. Pull out the list of topics it covers, in order, with the week and term for each if shown. Use the exact wording from the document. Ignore page headers, footers, and advertising text.
+
+SCHEME TEXT:
+${text}
+
+Return JSON: { "topics": [ { "title": "exact topic title", "week": "term and week if shown, else empty string" } ] }`,
+      },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: 0.2,
+  })
+  const parsed = JSON.parse(response.choices[0].message.content!) as { topics?: { title: string; week?: string }[] }
+  const topics = (parsed.topics || []).filter(t => t.title?.trim()).slice(0, 25)
+  return { topics, text }
+}
+
 // ─── OCR ────────────────────────────────────────────────────────────────────
 
 export async function readPhotoWithGemini(

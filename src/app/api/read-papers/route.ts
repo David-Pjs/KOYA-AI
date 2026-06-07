@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { hasGeminiKey } from '@/lib/pipeline'
 
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
 
     if (photos.length === 0) return NextResponse.json({ error: 'No papers provided' }, { status: 400 })
     if (questions.length === 0) return NextResponse.json({ error: 'Questions missing' }, { status: 400 })
+    if (!hasGeminiKey()) {
+      return NextResponse.json({
+        error: 'Reading handwritten papers needs the image reader (Gemini), which is not set up yet. For now, enter the counts by hand instead.',
+      }, { status: 422 })
+    }
 
     const batch = photos.slice(0, MAX_PAPERS).filter(p => p.size <= MAX_BYTES)
     const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' })
