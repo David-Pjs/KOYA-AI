@@ -52,9 +52,9 @@ export default function Board({ setup, questions, groundedSource, onBack, onEnte
                 <p className="font-display" style={{ fontSize: '1.3rem', fontWeight: 500, lineHeight: 1.35, margin: '0 0 12px', letterSpacing: '-0.01em' }}>
                   {q.question}
                 </p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <span className="chip chip-green">Tests · {q.skill_tested}</span>
-                  <span className="chip chip-terra">From · {q.prerequisite_from}</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <span className="chip chip-green chip-wrap">Tests · {q.skill_tested}</span>
+                  <span className="chip chip-terra chip-wrap">From · {q.prerequisite_from}</span>
                 </div>
                 {q.answer && (showAnswers ? (
                   <p className="answer-key" style={{ margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: 8, fontSize: '.9rem' }}>
