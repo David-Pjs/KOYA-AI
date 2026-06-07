@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# koya dev artifacts (screenshots, scratch, logs)
+/_shots
+/_shots.mjs
+/_guides
+*.log
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -1,65 +1,134 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+import { useState } from 'react'
+import type { ClassSetup, Diagnosis, Question } from '@/lib/koya'
+import { analyzeResults, generateQuestions, readPapers, readScheme, scaleToClass } from '@/lib/koya'
+import Home from '@/components/koya/Home'
+import Setup from '@/components/koya/Setup'
+import Generating from '@/components/koya/Generating'
+import Board from '@/components/koya/Board'
+import Marks from '@/components/koya/Marks'
+import Papers from '@/components/koya/Papers'
+import Reveal from '@/components/koya/Reveal'
+
+type Stage = 'home' | 'setup' | 'generating' | 'board' | 'marks' | 'papers' | 'reveal'
+
+export default function Koya() {
+  const [stage, setStage] = useState<Stage>('home')
+  const [setup, setSetup] = useState<ClassSetup | null>(null)
+  const [questions, setQuestions] = useState<Question[]>([])
+  const [wrongCounts, setWrongCounts] = useState<number[]>([])
+  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
+  const [readingScheme, setReadingScheme] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function startQuestions(s: ClassSetup, photo: File | null) {
+    setSetup(s)
+    setReadingScheme(!!photo)
+    setStage('generating')
+    setError(null)
+    try {
+      let withScheme = s
+      if (photo) {
+        const text = await readScheme(photo, s)
+        withScheme = { ...s, schemeText: text }
+        setSetup(withScheme)
+      }
+      const qs = await generateQuestions(withScheme)
+      setQuestions(qs)
+      setStage('board')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setStage('setup')
+    }
+  }
+
+  async function runAnalysis(counts: number[], s: ClassSetup, paperNotes?: string[]) {
+    setDiagnosis(null)
+    setError(null)
+    setWrongCounts(counts)
+    setStage('reveal')
+    try {
+      const d = await analyzeResults(s, questions, counts, paperNotes)
+      setDiagnosis(d)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    }
+  }
+
+  async function runFromPapers(files: File[], s: ClassSetup) {
+    setDiagnosis(null)
+    setError(null)
+    setStage('reveal')
+    try {
+      const read = await readPapers(files, s, questions)
+      const counts = scaleToClass(read.wrongInSample, read.sampleSize, s.studentCount)
+      await runAnalysis(counts, s, read.notes)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    }
+  }
+
+  function reset() {
+    setStage('home')
+    setSetup(null)
+    setQuestions([])
+    setWrongCounts([])
+    setDiagnosis(null)
+    setError(null)
+  }
+
+  if (stage === 'home') return <Home onStart={() => setStage('setup')} />
+
+  if (stage === 'setup')
+    return <Setup onBack={reset} onSubmit={startQuestions} />
+
+  if (stage === 'generating' && setup)
+    return <Generating setup={setup} readingScheme={readingScheme} />
+
+  if (stage === 'board' && setup)
+    return (
+      <Board
+        setup={setup}
+        questions={questions}
+        onBack={() => setStage('setup')}
+        onEnterMarks={() => setStage('marks')}
+        onReadPapers={() => setStage('papers')}
+      />
+    )
+
+  if (stage === 'marks' && setup)
+    return (
+      <Marks
+        setup={setup}
+        questions={questions}
+        onBack={() => setStage('board')}
+        onUsePhotos={() => setStage('papers')}
+        onSubmit={counts => runAnalysis(counts, setup)}
+      />
+    )
+
+  if (stage === 'papers' && setup)
+    return (
+      <Papers
+        setup={setup}
+        onBack={() => setStage('board')}
+        onUseCounts={() => setStage('marks')}
+        onSubmit={files => runFromPapers(files, setup)}
+      />
+    )
+
+  if (stage === 'reveal' && setup)
+    return (
+      <Reveal
+        setup={setup}
+        questions={questions}
+        diagnosis={diagnosis}
+        error={error}
+        onReset={reset}
+        onRetry={() => runAnalysis(wrongCounts, setup)}
+      />
+    )
+
+  return <Home onStart={() => setStage('setup')} />
 }
