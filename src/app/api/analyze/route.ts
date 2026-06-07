@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
+import { lookupCurriculum, curriculumGrounding } from '@/lib/curriculum'
 
 const deepseek = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest) {
   const questionSummary = questions.map((q: any, i: number) => (
     `Q${i + 1}: "${q.question}" (tests: ${q.skill_tested}, from ${q.prerequisite_from}) — ${wrongCounts[i]} of ${studentCount} students wrong`
   )).join('\n')
+
+  const entry = lookupCurriculum(topic, subject)
+  const grounding = entry ? `\n${curriculumGrounding(entry)}\nWhen you name the root_topic, use one of these documented prerequisite skills and its class label.\n` : ''
 
   const realErrors = Array.isArray(paperNotes) && paperNotes.length
     ? `\nKoya read the actual marked papers. These are real mistakes students made, in their own working:\n${paperNotes.map((n: string) => `- ${n}`).join('\n')}\nUse these concrete errors in your explanation and especially in the evidence, quoting the kind of mistake you saw.`
@@ -35,6 +39,7 @@ Class size: ${studentCount} students
 Diagnostic results:
 ${questionSummary}
 ${realErrors}
+${grounding}
 
 Think like a veteran teacher tracing a problem to its source. The five questions each test a different prerequisite skill. Look at WHICH questions had the highest wrong-counts and what those skills have in common. The root gap is the single earlier skill that most of the failed questions secretly depend on.
 

@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file    = (formData.get('photo') ?? formData.get('file')) as File | null
-    const topic   = formData.get('topic') as string
     const subject = formData.get('subject') as string
 
     if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
@@ -29,25 +28,30 @@ export async function POST(req: NextRequest) {
     const base64 = Buffer.from(bytes).toString('base64')
 
     const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' })
-    const result = await model.generateContent([
-      { inlineData: { data: base64, mimeType } },
-      `This is a Nigerian or African secondary school scheme of work or lesson plan. It may be a multi-page PDF, a printed Ministry of Education booklet, a typed school document, a handwritten plan, or a photo forwarded on WhatsApp.
+    const result = await model.generateContent({
+      contents: [{
+        role: 'user',
+        parts: [
+          { inlineData: { data: base64, mimeType } },
+          { text: `This is a Nigerian or African secondary school ${subject} scheme of work or lesson plan. It may be a multi-page PDF, a printed Ministry booklet, a typed school document, a handwritten plan, or a WhatsApp photo.
 
-Subject: ${subject}
-Topic the teacher is focused on this week: ${topic}
+Read it and return the list of topics it covers, in order, with the week and term for each if shown. Use the exact wording from the document. Then return the full extracted text faithfully (do not invent content).
 
-Find the part of this document that covers "${topic}" (or the closest week to it) and extract, in plain text:
-1. The topic title, week number, and term if visible
-2. The learning objectives for that topic
-3. The content and sub-topics listed under it
-4. Any stated prerequisite knowledge or "previous knowledge" the document expects
-5. Teacher activities or teaching methods listed
+Respond ONLY with valid JSON:
+{
+  "topics": [
+    { "title": "exact topic title from the document", "week": "term and week if shown, else empty string" }
+  ],
+  "text": "the full extracted text of the relevant section(s)"
+}` },
+        ],
+      }],
+      generationConfig: { responseMimeType: 'application/json' },
+    })
 
-If "${topic}" is not in the document, extract the overall scope and sequence so the surrounding topics are clear. Keep it concise and faithful to the document. Do not invent content that is not there.`,
-    ])
-
-    const text = result.response.text()
-    return NextResponse.json({ text })
+    const parsed = JSON.parse(result.response.text()) as { topics?: { title: string; week?: string }[]; text?: string }
+    const topics = (parsed.topics || []).filter(t => t.title?.trim()).slice(0, 20)
+    return NextResponse.json({ topics, text: parsed.text || '' })
   } catch (err) {
     console.error('[read-scheme]', err)
     return NextResponse.json({ error: 'Could not read that document', detail: String(err) }, { status: 500 })

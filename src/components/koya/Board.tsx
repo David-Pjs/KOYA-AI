@@ -7,12 +7,13 @@ import Wordmark from './Wordmark'
 interface Props {
   setup: ClassSetup
   questions: Question[]
+  groundedSource?: string
   onBack: () => void
   onEnterMarks: () => void
   onReadPapers: () => void
 }
 
-export default function Board({ setup, questions, onBack, onEnterMarks, onReadPapers }: Props) {
+export default function Board({ setup, questions, groundedSource, onBack, onEnterMarks, onReadPapers }: Props) {
   const [showAnswers, setShowAnswers] = useState(true)
   return (
     <div className="stage">
@@ -68,7 +69,14 @@ export default function Board({ setup, questions, onBack, onEnterMarks, onReadPa
           ))}
         </ol>
 
-        <div className="no-print" style={{ marginTop: 32 }}>
+        {groundedSource && (
+          <p style={{ marginTop: 18, fontSize: '.78rem', color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: 'var(--ok)' }}>✓</span>
+            Class levels grounded in the {groundedSource}, not estimated.
+          </p>
+        )}
+
+        <div className="no-print" style={{ marginTop: groundedSource ? 20 : 32 }}>
           <p className="label" style={{ marginBottom: 12 }}>When the class is done, two ways to give Koya the marks</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button className="btn btn-primary" onClick={onEnterMarks} style={{ width: '100%' }}>

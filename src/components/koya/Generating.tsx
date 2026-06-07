@@ -5,7 +5,7 @@ import type { ClassSetup } from '@/lib/koya'
 
 export default function Generating({ setup, readingScheme }: { setup: ClassSetup; readingScheme: boolean }) {
   const steps = [
-    readingScheme ? 'Reading your scheme of work' : `Opening the ${setup.klass} curriculum`,
+    readingScheme ? 'Matching your scheme of work' : `Opening the ${setup.klass} curriculum`,
     `Finding the skills ${setup.topic.toLowerCase()} leans on`,
     'Writing questions a copied answer cannot fake',
     'Putting five on the board',

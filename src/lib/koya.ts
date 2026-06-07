@@ -48,18 +48,33 @@ function contextLine(s: ClassSetup): string {
   return [s.schemeText, bits ? `Class: ${bits}.` : ""].filter(Boolean).join("\n\n");
 }
 
-export async function readScheme(photo: File, setup: ClassSetup): Promise<string> {
+export interface SchemeTopic {
+  title: string;
+  week?: string;
+}
+
+export interface SchemeRead {
+  topics: SchemeTopic[];
+  text: string;
+}
+
+export async function readScheme(file: File, subject: string): Promise<SchemeRead> {
   const form = new FormData();
-  form.append("photo", photo);
-  form.append("topic", setup.topic);
-  form.append("subject", setup.subject);
+  form.append("photo", file);
+  form.append("subject", subject);
   const res = await fetch("/api/read-scheme", { method: "POST", body: form });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return data.text as string;
+  return { topics: data.topics ?? [], text: data.text ?? "" };
 }
 
-export async function generateQuestions(setup: ClassSetup): Promise<Question[]> {
+export interface QuestionSet {
+  questions: Question[];
+  grounded: boolean;
+  source?: string;
+}
+
+export async function generateQuestions(setup: ClassSetup): Promise<QuestionSet> {
   const res = await fetch("/api/diagnostic", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -71,7 +86,7 @@ export async function generateQuestions(setup: ClassSetup): Promise<Question[]> 
   });
   const data = await res.json();
   if (data.error) throw new Error(data.error);
-  return data.questions as Question[];
+  return { questions: data.questions ?? [], grounded: !!data.grounded, source: data.source };
 }
 
 export async function analyzeResults(

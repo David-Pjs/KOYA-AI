@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { lookupCurriculum, curriculumGrounding, CURRICULUM_SOURCE, CURRICULUM_COUNTRY } from './curriculum'
 
 const deepseek = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
@@ -190,7 +191,10 @@ export async function generateDiagnostic(
   topic: string,
   subject: string,
   context?: string
-): Promise<{ questions: DiagnosticQuestion[] }> {
+): Promise<{ questions: DiagnosticQuestion[]; grounded: boolean; source?: string }> {
+  const entry = lookupCurriculum(topic, subject)
+  const grounding = entry ? curriculumGrounding(entry) : ''
+
   const response = await deepseek.chat.completions.create({
     model: 'deepseek-v4-flash',
     messages: [
@@ -207,9 +211,10 @@ Respond only with valid JSON.`,
         content: `Topic: ${topic}
 Subject: ${subject}
 ${context ? `Context: ${context}` : ''}
-
+${grounding ? `\n${grounding}\n` : ''}
 Generate exactly 5 short diagnostic questions.
 Each question tests ONE specific prerequisite skill students need BEFORE this topic.
+${grounding ? 'Base your questions on the grounded prerequisite skills above, and use the grounded class labels for prerequisite_from.' : 'Identify the genuine prerequisites for this topic from the standard secondary curriculum, and give your best estimate of the class each is taught for prerequisite_from.'}
 
 CRITICAL RULE: Not a single question may require ${topic} itself to answer. If a student who has never been taught ${topic} could not attempt a question, it is wrong, replace it. Every question must come from an EARLIER class or term than ${topic}. The whole point is to find the buried gap underneath ${topic}, not to test ${topic}.
 Before returning, check each question: "could a student solve this without knowing ${topic}?" If no, replace it with a genuine prerequisite.
@@ -233,7 +238,12 @@ Return:
     temperature: 0.4,
   })
 
-  return JSON.parse(response.choices[0].message.content!)
+  const parsed = JSON.parse(response.choices[0].message.content!) as { questions: DiagnosticQuestion[] }
+  return {
+    questions: parsed.questions,
+    grounded: !!entry,
+    source: entry ? `${CURRICULUM_SOURCE} (${CURRICULUM_COUNTRY})` : undefined,
+  }
 }
 
 // ─── LESSON BRIEF GENERATOR ──────────────────────────────────────────────────

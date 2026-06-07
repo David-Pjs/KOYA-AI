@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { ClassSetup, Diagnosis, Question } from '@/lib/koya'
-import { analyzeResults, generateQuestions, readPapers, readScheme, scaleToClass } from '@/lib/koya'
+import { analyzeResults, generateQuestions, readPapers, scaleToClass } from '@/lib/koya'
 import Home from '@/components/koya/Home'
 import Setup from '@/components/koya/Setup'
 import Generating from '@/components/koya/Generating'
@@ -17,25 +17,21 @@ export default function Koya() {
   const [stage, setStage] = useState<Stage>('home')
   const [setup, setSetup] = useState<ClassSetup | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
+  const [groundedSource, setGroundedSource] = useState<string | undefined>(undefined)
   const [wrongCounts, setWrongCounts] = useState<number[]>([])
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null)
   const [readingScheme, setReadingScheme] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function startQuestions(s: ClassSetup, photo: File | null) {
+  async function startQuestions(s: ClassSetup) {
     setSetup(s)
-    setReadingScheme(!!photo)
+    setReadingScheme(!!s.schemeText)
     setStage('generating')
     setError(null)
     try {
-      let withScheme = s
-      if (photo) {
-        const text = await readScheme(photo, s)
-        withScheme = { ...s, schemeText: text }
-        setSetup(withScheme)
-      }
-      const qs = await generateQuestions(withScheme)
-      setQuestions(qs)
+      const qs = await generateQuestions(s)
+      setQuestions(qs.questions)
+      setGroundedSource(qs.grounded ? qs.source : undefined)
       setStage('board')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
@@ -91,6 +87,7 @@ export default function Koya() {
       <Board
         setup={setup}
         questions={questions}
+        groundedSource={groundedSource}
         onBack={() => setStage('setup')}
         onEnterMarks={() => setStage('marks')}
         onReadPapers={() => setStage('papers')}
