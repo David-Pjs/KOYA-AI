@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import type { ClassSetup, SchemeTopic } from '@/lib/koya'
 import { readScheme } from '@/lib/koya'
+import { COMMON_SUBJECTS, groundedTopics } from '@/lib/curriculum'
 import Wordmark from './Wordmark'
 
 interface Props {
@@ -27,6 +28,7 @@ export default function Setup({ onBack, onSubmit }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const ready = subject.trim() && topic.trim() && studentCount > 0 && !reading
+  const topicHints = groundedTopics(subject)
 
   async function pickFile(f: File) {
     setFile(f)
@@ -81,7 +83,10 @@ export default function Setup({ onBack, onSubmit }: Props) {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-          <Field label="Subject" value={subject} onChange={setSubject} placeholder="Mathematics, Biology, Physics" />
+          <div>
+            <Field label="Subject" value={subject} onChange={setSubject} placeholder="Mathematics, Biology, Physics" />
+            <Suggestions items={COMMON_SUBJECTS} active={subject} onPick={setSubject} />
+          </div>
 
           <SchemeUpload
             file={file}
@@ -96,12 +101,22 @@ export default function Setup({ onBack, onSubmit }: Props) {
             fileRef={fileRef}
           />
 
-          <Field
-            label={pickedTopic ? 'Topic this week · from your scheme' : 'Topic this week'}
-            value={topic}
-            onChange={v => { setTopic(v); setPickedTopic(null) }}
-            placeholder="Simultaneous Equations, Photosynthesis"
-          />
+          <div>
+            <Field
+              label={pickedTopic ? 'Topic this week · from your scheme' : 'Topic this week'}
+              value={topic}
+              onChange={v => { setTopic(v); setPickedTopic(null) }}
+              placeholder="Simultaneous Equations, Photosynthesis"
+            />
+            {topicHints.length > 0 && (
+              <Suggestions
+                items={topicHints}
+                active={topic}
+                onPick={t => { setTopic(t); setPickedTopic(null) }}
+                hint="Koya knows these best"
+              />
+            )}
+          </div>
 
           <div className="setup-row">
             <Field label="Class" value={klass} onChange={setKlass} placeholder="SS2" />
@@ -116,6 +131,36 @@ export default function Setup({ onBack, onSubmit }: Props) {
         <button className="btn btn-primary" disabled={!ready} onClick={submit} style={{ width: '100%', marginTop: 34 }}>
           {reading ? 'Koya is reading your scheme…' : 'Write the diagnostic questions'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function Suggestions({ items, active, onPick, hint }: { items: string[]; active: string; onPick: (v: string) => void; hint?: string }) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      {hint && <p className="label" style={{ color: 'var(--ink-3)', marginBottom: 8 }}>{hint}</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {items.map(item => {
+          const on = active.trim().toLowerCase() === item.toLowerCase()
+          return (
+            <button
+              key={item}
+              type="button"
+              onClick={() => onPick(item)}
+              style={{
+                cursor: 'pointer', borderRadius: 99, padding: '6px 12px',
+                fontSize: '.82rem', fontWeight: 600,
+                border: `1.5px solid ${on ? 'var(--green)' : 'var(--line-strong)'}`,
+                background: on ? 'var(--green-wash)' : 'var(--paper-raised)',
+                color: on ? 'var(--green-ink)' : 'var(--ink-2)',
+                transition: 'all .15s var(--ease)',
+              }}
+            >
+              {item}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

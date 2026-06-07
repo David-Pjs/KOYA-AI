@@ -14,7 +14,7 @@ interface Props {
 }
 
 export default function Board({ setup, questions, groundedSource, onBack, onEnterMarks, onReadPapers }: Props) {
-  const [showAnswers, setShowAnswers] = useState(true)
+  const [showAnswers, setShowAnswers] = useState(false)
   return (
     <div className="stage">
       <div className="col">

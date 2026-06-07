@@ -243,6 +243,25 @@ export function lookupCurriculum(topic: string, subject: string): CurriculumEntr
   return best?.entry ?? null
 }
 
+// Topics we ground with verified questions and document-backed class labels.
+// Surfaced as quick-pick suggestions so teachers land on topics that work best.
+export function groundedTopics(subject: string): string[] {
+  if (!/math/i.test(subject)) return []
+  return [
+    'Simultaneous Equations',
+    'Quadratic Equations',
+    'Change of Subject of Formula',
+    'Indices',
+    'Logarithms',
+    'Trigonometry',
+    'Mensuration',
+    'Statistics',
+    'Probability',
+  ]
+}
+
+export const COMMON_SUBJECTS = ['Mathematics', 'Physics', 'Chemistry', 'Biology']
+
 // Build a grounding block for the prompt from a matched entry.
 export function curriculumGrounding(entry: CurriculumEntry): string {
   const prereqs = entry.prerequisites
