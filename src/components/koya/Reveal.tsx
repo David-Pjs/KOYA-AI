@@ -103,8 +103,10 @@ function Diagnosed({ setup, d, onReset }: { setup: ClassSetup; d: Diagnosis; onR
 
   const total = setup.studentCount
   const affected = d.dominant_gap.affected_count
-  // scale described in words, not a shouting digit
-  const share = affected >= total * 0.66 ? 'Most of the class' : affected >= total * 0.4 ? 'A large part of the class' : affected >= total * 0.2 ? 'A cluster of students' : 'A few students'
+  // scale described in words, not a shouting digit, and aware of one-student reads
+  const share = total === 1
+    ? 'This student'
+    : affected >= total * 0.66 ? 'Most of the class' : affected >= total * 0.4 ? 'A large part of the class' : affected >= total * 0.2 ? 'A cluster of students' : 'A few students'
 
   return (
     <div className="stage">
@@ -167,13 +169,31 @@ function GroupCard({ name, sev, group, total, delay }: { name: string; sev: 'cri
   const [open, setOpen] = useState(false)
   const color = `var(--${sev})`
   const wash = `var(--${sev}-wash)`
+  const empty = group.count === 0
+  const countLabel = total === 1 ? '' : `${group.count} of ${total}`
+
+  if (empty) {
+    return (
+      <div className="paper-card rise" style={{ animationDelay: `${delay}s`, overflow: 'hidden', opacity: 0.55 }}>
+        <div style={{ padding: '16px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--ink-3)', flexShrink: 0 }} />
+            <span className="font-display" style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--ink-2)' }}>{name}</span>
+            <span style={{ marginLeft: 'auto', fontSize: '.74rem', color: 'var(--ink-3)', fontWeight: 600 }}>none</span>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: '.82rem', color: 'var(--ink-3)', lineHeight: 1.5 }}>No one landed here this time.</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="paper-card rise" style={{ animationDelay: `${delay}s`, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '16px 18px', background: wash, borderBottom: `1.5px solid ${color}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
           <span className="font-display" style={{ fontSize: '1.05rem', fontWeight: 600, color: 'var(--ink)' }}>{name}</span>
-          <span style={{ marginLeft: 'auto', fontSize: '.74rem', color: 'var(--ink-3)', fontWeight: 600 }}>about {group.count} of {total}</span>
+          {countLabel && <span style={{ marginLeft: 'auto', fontSize: '.74rem', color: 'var(--ink-3)', fontWeight: 600 }}>{countLabel}</span>}
         </div>
         <p style={{ margin: '8px 0 0', fontSize: '.85rem', color: 'var(--ink)', lineHeight: 1.5 }}>{group.description}</p>
       </div>
