@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { ClassSetup, Diagnosis, Question } from '@/lib/koya'
+import type { ClassSetup, Diagnosis, Question, GroupCounts } from '@/lib/koya'
 import { analyzeResults, generateQuestions, readPapers } from '@/lib/koya'
 import Home from '@/components/koya/Home'
 import Setup from '@/components/koya/Setup'
@@ -41,13 +41,13 @@ export default function Koya() {
     }
   }
 
-  async function runAnalysis(counts: number[], s: ClassSetup, paperNotes?: string[]) {
+  async function runAnalysis(counts: number[], s: ClassSetup, paperNotes?: string[], groupCounts?: GroupCounts) {
     setDiagnosis(null)
     setError(null)
     setWrongCounts(counts)
     setStage('reveal')
     try {
-      const d = await analyzeResults(s, questions, counts, paperNotes)
+      const d = await analyzeResults(s, questions, counts, paperNotes, groupCounts)
       setDiagnosis(d)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
@@ -65,7 +65,7 @@ export default function Koya() {
       // whole class. The cohort for this run IS the sample Koya read.
       const sampleSetup: ClassSetup = { ...s, studentCount: read.sampleSize }
       setSetup(sampleSetup)
-      await runAnalysis(read.wrongInSample, sampleSetup, read.notes)
+      await runAnalysis(read.wrongInSample, sampleSetup, read.notes, read.groupCounts)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
       setStage('papers')

@@ -11,7 +11,7 @@ const deepseek = new OpenAI({
 export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
-  const { topic, subject, studentCount, questions, wrongCounts, paperNotes } = await req.json()
+  const { topic, subject, studentCount, questions, wrongCounts, paperNotes, groupCounts } = await req.json()
 
   const questionSummary = questions.map((q: any, i: number) => (
     `Q${i + 1}: "${q.question}" (tests: ${q.skill_tested}, from ${q.prerequisite_from}) — ${wrongCounts[i]} of ${studentCount} students wrong`
@@ -30,10 +30,15 @@ export async function POST(req: NextRequest) {
   // the rest are Advanced. Deterministic and auditable.
   const counts: number[] = (wrongCounts as number[]).map(n => Math.max(0, Math.min(n, studentCount)))
   const dominantWrong = counts.length ? Math.max(...counts) : 0
-  const foundationCount = Math.round(dominantWrong * 0.55)
-  const coreCount = dominantWrong - foundationCount
-  const advancedCount = Math.max(0, studentCount - dominantWrong)
+
+  // Photo mode gives REAL per-student grouping (each paper sorted by its own
+  // errors). Counts mode has only aggregates, so we estimate the split.
+  const realGrouping = groupCounts && typeof groupCounts.foundation === 'number'
+  const foundationCount = realGrouping ? groupCounts.foundation : Math.round(dominantWrong * 0.55)
+  const coreCount = realGrouping ? groupCounts.core : dominantWrong - foundationCount
+  const advancedCount = realGrouping ? groupCounts.advanced : Math.max(0, studentCount - dominantWrong)
   const computedGroups = { foundation: foundationCount, core: coreCount, advanced: advancedCount }
+  const affected = realGrouping ? foundationCount + coreCount : dominantWrong
   const readinessScore = studentCount > 0 ? Math.round((advancedCount / studentCount) * 100) : 0
 
   const response = await deepseek.chat.completions.create({
@@ -59,7 +64,7 @@ Do this:
 1. Identify the dominant misconception — the one root gap that explains the most failures across the questions.
 2. Show your reasoning: name the specific questions (by number and skill) whose high failure rates point to this gap, and the common thread between them. This is the evidence a teacher can check.
 3. Explain plainly what students are doing wrong and the exact earlier class/term the gap comes from.
-4. The group sizes are ALREADY COMPUTED from the data (do not change them): Foundation = ${foundationCount}, Core = ${coreCount}, Advanced = ${advancedCount}, and ${dominantWrong} students share the dominant gap. Write each group's description and activity to fit these exact numbers.
+4. The group sizes are ALREADY COMPUTED from the data (do not change them): Foundation = ${foundationCount}, Core = ${coreCount}, Advanced = ${advancedCount}${realGrouping ? ' (sorted from each student\'s actual paper)' : ''}. Write each group's description and activity to fit these exact numbers. If a group is 0, say so plainly and give no activity for it.
 5. Give one paper-based activity per group (10 min, no devices). CRITICAL: the teacher is one person in one room. The Foundation and Advanced activities must be ones students can run on their own, in pairs or silently, WHILE the teacher works directly with another group. State briefly how each runs without her constant attention.
 
 Return this exact JSON:
@@ -122,9 +127,10 @@ Return this exact JSON:
     result.groups.core = { ...result.groups.core, count: computedGroups.core }
     result.groups.advanced = { ...result.groups.advanced, count: computedGroups.advanced }
   }
-  if (result.dominant_gap) result.dominant_gap.affected_count = dominantWrong
+  if (result.dominant_gap) result.dominant_gap.affected_count = affected
   result.score = readinessScore
   result.computed = true
+  result.realGrouping = !!realGrouping
 
   return NextResponse.json(result)
 }

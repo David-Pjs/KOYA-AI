@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const photos = form.getAll('photos').filter(f => f instanceof File) as File[]
     const topic = form.get('topic') as string
     const subject = form.get('subject') as string
-    const questions = JSON.parse((form.get('questions') as string) || '[]') as { question: string; skill_tested: string }[]
+    const questions = JSON.parse((form.get('questions') as string) || '[]') as { question: string; skill_tested: string; answer?: string }[]
 
     if (photos.length === 0) return NextResponse.json({ error: 'No papers provided' }, { status: 400 })
     if (questions.length === 0) return NextResponse.json({ error: 'Questions missing' }, { status: 400 })
@@ -28,7 +28,9 @@ export async function POST(req: NextRequest) {
     }
 
     const batch = photos.slice(0, MAX_PAPERS).filter(p => p.size <= MAX_BYTES)
-    const qList = questions.map((q, i) => `Q${i + 1}: ${q.question}  [skill: ${q.skill_tested}]`).join('\n')
+    const qList = questions.map((q, i) =>
+      `Q${i + 1}: ${q.question}${q.answer ? `   CORRECT ANSWER: ${q.answer}` : ''}  [skill: ${q.skill_tested}]`,
+    ).join('\n')
 
     const readings = await Promise.all(
       batch.map(async (file): Promise<PaperReading | null> => {
@@ -36,10 +38,12 @@ export async function POST(req: NextRequest) {
           const base64 = Buffer.from(await file.arrayBuffer()).toString('base64')
           const instruction = `This is a photo of one Nigerian secondary school student's marked answer paper for a ${subject} diagnostic on "${topic}".
 
-The questions were:
+The questions, each with its CORRECT ANSWER, are:
 ${qList}
 
-Read the student's actual working. Nigerian handwriting can differ from Western styles; use the maths context to interpret. For each question, decide if the final answer is WRONG, and if so describe the specific mistake in the working (wrong sign, wrong operation, blank, wrong method). Be concrete and short.
+Your job is to READ the student's final answer to each question, then compare it to the CORRECT ANSWER given above. Do not decide correctness from your own calculation; grade strictly against the provided correct answer (treat mathematically equivalent forms as correct, e.g. "x=7" and "7", "3/4" and "0.75"). Nigerian handwriting can differ from Western styles; use the maths context to read it.
+
+A question is WRONG only if the student's final answer does not match the correct answer (or is blank). For each wrong one, describe the specific mistake briefly (wrong sign, wrong operation, blank, etc.).
 
 Respond ONLY with JSON:
 { "wrong": [question numbers the student got wrong], "errors": [ { "q": number, "error": "short specific description" } ] }`
@@ -62,6 +66,21 @@ Respond ONLY with JSON:
       valid.filter(r => r.wrong.includes(i + 1)).length,
     )
 
+    // REAL per-student grouping: each paper sorted by what THAT student actually
+    // got wrong, not a formula. The root question is the most-failed one; a
+    // student who missed it lacks the foundation; one who got it but slipped
+    // elsewhere is core; a clean paper is advanced.
+    const rootQ = wrongInSample.length
+      ? wrongInSample.indexOf(Math.max(...wrongInSample)) + 1
+      : 1
+    let foundation = 0, core = 0, advanced = 0
+    for (const r of valid) {
+      if (r.wrong.includes(rootQ)) foundation++
+      else if (r.wrong.length > 0) core++
+      else advanced++
+    }
+    const groupCounts = { foundation, core, advanced }
+
     const notesByQ = new Map<number, string[]>()
     for (const r of valid) for (const e of r.errors || []) {
       if (!notesByQ.has(e.q)) notesByQ.set(e.q, [])
@@ -72,7 +91,7 @@ Respond ONLY with JSON:
       if (errs[0]) notes.push(`Q${q}: ${errs[0]}`)
     }
 
-    return NextResponse.json({ sampleSize: valid.length, wrongInSample, notes })
+    return NextResponse.json({ sampleSize: valid.length, wrongInSample, notes, groupCounts })
   } catch (err) {
     console.error('[read-papers]', err)
     return NextResponse.json({ error: 'Could not read the papers', detail: String(err) }, { status: 500 })

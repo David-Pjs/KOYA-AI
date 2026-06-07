@@ -89,11 +89,18 @@ export async function generateQuestions(setup: ClassSetup): Promise<QuestionSet>
   return { questions: data.questions ?? [], grounded: !!data.grounded, source: data.source };
 }
 
+export interface GroupCounts {
+  foundation: number;
+  core: number;
+  advanced: number;
+}
+
 export async function analyzeResults(
   setup: ClassSetup,
   questions: Question[],
   wrongCounts: number[],
   paperNotes?: string[],
+  groupCounts?: GroupCounts,
 ): Promise<Diagnosis> {
   const res = await fetch("/api/analyze", {
     method: "POST",
@@ -105,6 +112,7 @@ export async function analyzeResults(
       questions,
       wrongCounts,
       paperNotes,
+      groupCounts,
     }),
   });
   const data = await res.json();
@@ -116,6 +124,7 @@ export interface PaperReadResult {
   sampleSize: number;
   wrongInSample: number[];
   notes: string[];
+  groupCounts: GroupCounts;
 }
 
 export async function readPapers(
