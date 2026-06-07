@@ -36,25 +36,14 @@ yarn-error.log*
 # vercel
 .vercel
 
-# koya dev artifacts (screenshots, scratch, logs)
-# koya dev/scratch artifacts
-/_shots
-/_curriculum
-/_guides
-/_demo_papers
-/_*.mjs
-/_*.png
-/_*.json
-/_*.sh
-/_*.py
+# local scratch and logs
+/_*
 *.log
+
+# agent tooling
+AGENTS.md
+CLAUDE.md
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-.vercel
-
-# agent tooling, not product
-AGENTS.md
-CLAUDE.md
