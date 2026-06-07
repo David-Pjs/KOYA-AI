@@ -54,3 +54,7 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# agent tooling, not product
+AGENTS.md
+CLAUDE.md
