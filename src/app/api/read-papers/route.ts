@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
-import { hasGeminiKey } from '@/lib/pipeline'
-
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+import { readImage, extractJson, hasVisionKey } from '@/lib/vision'
 
 const MAX_PAPERS = 15
 const MAX_BYTES = 12 * 1024 * 1024
@@ -10,7 +7,7 @@ const MAX_BYTES = 12 * 1024 * 1024
 export const maxDuration = 300
 
 interface PaperReading {
-  wrong: number[] // question numbers (1-based) this student got wrong
+  wrong: number[]
   errors: { q: number; error: string }[]
 }
 
@@ -24,45 +21,31 @@ export async function POST(req: NextRequest) {
 
     if (photos.length === 0) return NextResponse.json({ error: 'No papers provided' }, { status: 400 })
     if (questions.length === 0) return NextResponse.json({ error: 'Questions missing' }, { status: 400 })
-    if (!hasGeminiKey()) {
+    if (!hasVisionKey()) {
       return NextResponse.json({
-        error: 'Reading handwritten papers needs the image reader (Gemini), which is not set up yet. For now, enter the counts by hand instead.',
+        error: 'The image reader is not set up yet. For now, enter the counts by hand instead.',
       }, { status: 422 })
     }
 
     const batch = photos.slice(0, MAX_PAPERS).filter(p => p.size <= MAX_BYTES)
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' })
-
     const qList = questions.map((q, i) => `Q${i + 1}: ${q.question}  [skill: ${q.skill_tested}]`).join('\n')
 
     const readings = await Promise.all(
       batch.map(async (file): Promise<PaperReading | null> => {
         try {
           const base64 = Buffer.from(await file.arrayBuffer()).toString('base64')
-          const res = await model.generateContent({
-            contents: [{
-              role: 'user',
-              parts: [
-                { inlineData: { data: base64, mimeType: file.type || 'image/jpeg' } },
-                { text: `This is a photo of one Nigerian secondary school student's marked answer paper for a ${subject} diagnostic on the topic "${topic}".
+          const instruction = `This is a photo of one Nigerian secondary school student's marked answer paper for a ${subject} diagnostic on "${topic}".
 
-The five questions were:
+The questions were:
 ${qList}
 
-Read the student's actual working. Nigerian handwriting can differ from Western styles; use the maths context to interpret. For each question, decide if the final answer is WRONG, and if so, describe the specific mistake in the working (wrong sign, wrong operation, blank, wrong method). Be concrete and short.
+Read the student's actual working. Nigerian handwriting can differ from Western styles; use the maths context to interpret. For each question, decide if the final answer is WRONG, and if so describe the specific mistake in the working (wrong sign, wrong operation, blank, wrong method). Be concrete and short.
 
-Respond ONLY with valid JSON:
-{
-  "wrong": [list of question numbers 1-5 the student got wrong],
-  "errors": [{ "q": question number, "error": "short specific description of the mistake" }]
-}` },
-              ],
-            }],
-            generationConfig: { responseMimeType: 'application/json' },
-          })
-          const txt = res.response.text()
-          const parsed = JSON.parse(txt) as PaperReading
-          if (!Array.isArray(parsed.wrong)) return null
+Respond ONLY with JSON:
+{ "wrong": [question numbers the student got wrong], "errors": [ { "q": number, "error": "short specific description" } ] }`
+          const text = await readImage(base64, file.type || 'image/jpeg', instruction)
+          const parsed = extractJson<PaperReading>(text)
+          if (!parsed || !Array.isArray(parsed.wrong)) return null
           return parsed
         } catch {
           return null
@@ -79,7 +62,6 @@ Respond ONLY with valid JSON:
       valid.filter(r => r.wrong.includes(i + 1)).length,
     )
 
-    // collect the most vivid real errors, deduped lightly, one per question first
     const notesByQ = new Map<number, string[]>()
     for (const r of valid) for (const e of r.errors || []) {
       if (!notesByQ.has(e.q)) notesByQ.set(e.q, [])

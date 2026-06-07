@@ -37,12 +37,14 @@ yarn-error.log*
 .vercel
 
 # koya dev artifacts (screenshots, scratch, logs)
+# koya dev/scratch artifacts
 /_shots
-/_shots.mjs
-/_setupshot.mjs
-/_smoke.mjs
 /_curriculum
 /_guides
+/_*.mjs
+/_*.png
+/_*.json
+/_*.sh
 *.log
 
 # typescript

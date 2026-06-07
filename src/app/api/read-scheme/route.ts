@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { extractText, getDocumentProxy } from 'unpdf'
-import { structureSchemeText, hasGeminiKey } from '@/lib/pipeline'
-
-const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+import { structureSchemeText } from '@/lib/pipeline'
+import { readImage, extractJson, hasVisionKey } from '@/lib/vision'
 
 const ALLOWED = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/heic', 'image/heif']
 const MAX_BYTES = 20 * 1024 * 1024 // 20MB
@@ -46,35 +44,25 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── Path 2: image or scanned PDF — needs Gemini vision ──
-    if (!hasGeminiKey()) {
+    // ── Path 2: image or scanned PDF — Groq vision ──
+    if (!hasVisionKey()) {
       const why = mimeType === 'application/pdf'
         ? 'This looks like a scanned PDF with no text layer.'
-        : 'Photos need image reading.'
+        : 'Photos need the image reader.'
       return NextResponse.json({
-        error: `${why} Upload a normal (digital) PDF for now, or add a Gemini key to read photos and scans. You can also just type the topic.`,
+        error: `${why} Upload a normal (digital) PDF for now, or just type the topic.`,
       }, { status: 422 })
     }
 
     const base64 = Buffer.from(bytes).toString('base64')
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' })
-    const result = await model.generateContent({
-      contents: [{
-        role: 'user',
-        parts: [
-          { inlineData: { data: base64, mimeType } },
-          { text: `This is a Nigerian or African secondary school ${subject} scheme of work. Read it and return the list of topics it covers, in order, with the week and term for each if shown. Use the exact wording. Then return the full extracted text faithfully.
+    const instruction = `This is a Nigerian or African secondary school ${subject} scheme of work. Read it and return the list of topics it covers, in order, with the week and term for each if shown. Use the exact wording. Then return the full extracted text faithfully.
 
-Respond ONLY with valid JSON:
-{ "topics": [ { "title": "exact topic title", "week": "term and week if shown, else empty string" } ], "text": "the full extracted text" }` },
-        ],
-      }],
-      generationConfig: { responseMimeType: 'application/json' },
-    })
-
-    const parsed = JSON.parse(result.response.text()) as { topics?: { title: string; week?: string }[]; text?: string }
-    const topics = (parsed.topics || []).filter(t => t.title?.trim()).slice(0, 25)
-    return NextResponse.json({ topics, text: parsed.text || '', via: 'vision' })
+Respond ONLY with JSON:
+{ "topics": [ { "title": "exact topic title", "week": "term and week if shown, else empty string" } ], "text": "the full extracted text" }`
+    const text = await readImage(base64, mimeType, instruction)
+    const parsed = extractJson<{ topics?: { title: string; week?: string }[]; text?: string }>(text)
+    const topics = (parsed?.topics || []).filter(t => t.title?.trim()).slice(0, 25)
+    return NextResponse.json({ topics, text: parsed?.text || '', via: 'vision' })
   } catch (err) {
     console.error('[read-scheme]', err)
     return NextResponse.json({ error: 'Could not read that document', detail: String(err) }, { status: 500 })
