@@ -155,11 +155,12 @@ function bankFor(skill: string): BankItem[] | null {
   return null
 }
 
-// pick without repeating questions within a run
+// pick the first unused item — deterministic, so the same topic always yields
+// the same diagnostic (a teacher can prepare, and a demo paper always matches).
 function pick(items: BankItem[], used: Set<string>): BankItem | null {
   const free = items.filter(i => !used.has(i.question))
   const pool = free.length ? free : items
-  const choice = pool[Math.floor(Math.random() * pool.length)]
+  const choice = pool[0]
   used.add(choice.question)
   return choice
 }

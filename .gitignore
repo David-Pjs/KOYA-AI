@@ -41,10 +41,12 @@ yarn-error.log*
 /_shots
 /_curriculum
 /_guides
+/_demo_papers
 /_*.mjs
 /_*.png
 /_*.json
 /_*.sh
+/_*.py
 *.log
 
 # typescript
